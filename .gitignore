@@ -1,9 +1,7 @@
-<<<<<<< HEAD
 node_modules/
 .env
 .env.*
 !.env.example
-=======
 # Logs
 logs
 *.log
@@ -153,4 +151,3 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
->>>>>>> 298f9111a469fc345a5bd45e9f9e0d6d99d64360
