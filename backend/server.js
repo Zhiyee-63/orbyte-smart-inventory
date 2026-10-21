@@ -39,6 +39,87 @@ app.get("/health/db", async (_req, res) => {
   }
 });
 
+const LOW_STOCK_THRESHOLD = 5;
+const stockStatus = (stock) => (stock <= LOW_STOCK_THRESHOLD ? "Low" : "OK");
+
+app.post("/api/scan", async (req, res) => {
+  const barcode =
+    typeof req.body?.barcode === "string" ? req.body.barcode.trim() : "";
+  if (!barcode) return res.status(400).json({ error: "barcode_required" });
+
+  try {
+    const pool = getMysqlPool();
+    const [result] = await pool.query(
+      "UPDATE products SET stock = stock - 1 WHERE barcode = ? AND stock > 0",
+      [barcode],
+    );
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: "not_found_or_out_of_stock" });
+    }
+    const [[row]] = await pool.query(
+      "SELECT stock FROM products WHERE barcode = ?",
+      [barcode],
+    );
+    const status = stockStatus(row.stock);
+    return res.json({
+      barcode,
+      stock: row.stock,
+      status,
+      alert: status === "Low",
+    });
+  } catch (error) {
+    console.error("Scan failed:", error.code || error.name);
+    return res.status(500).json({ error: "scan_failed" });
+  }
+});
+
+app.get("/api/inventory", async (_req, res) => {
+  try {
+    const [rows] = await getMysqlPool().query(
+      "SELECT barcode, name, stock FROM products ORDER BY name",
+    );
+    return res.json(rows.map((r) => ({ ...r, status: stockStatus(r.stock) })));
+  } catch (error) {
+    console.error("Inventory failed:", error.code || error.name);
+    return res.status(500).json({ error: "inventory_failed" });
+  }
+});
+
+app.post("/api/approve", async (req, res) => {
+  const barcode =
+    typeof req.body?.barcode === "string" ? req.body.barcode.trim() : "";
+  const approvedBy =
+    typeof req.body?.approved_by === "string"
+      ? req.body.approved_by.trim()
+      : "";
+  if (!barcode || !approvedBy) {
+    return res.status(400).json({ error: "barcode_and_approved_by_required" });
+  }
+
+  try {
+    const pool = getMysqlPool();
+    const [rows] = await pool.query(
+      "SELECT name FROM products WHERE barcode = ?",
+      [barcode],
+    );
+    if (rows.length === 0)
+      return res.status(404).json({ error: "product_not_found" });
+
+    // send Whatsapp message
+    await pool.query(
+      "INSERT INTO activity_log (barcode, action, approved_by) VALUES (?, 'approved', ?)",
+      [barcode, approvedBy],
+    );
+    return res.json({
+      status: "ok",
+      message: "Approved and logged (WhatsApp not connected yet)",
+    });
+  } catch (error) {
+    console.error("Approve failed:", error.code || error.name);
+    return res.status(500).json({ error: "approve_failed" });
+  }
+});
+
 app.post("/api/draft-supplier-message", async (req, res) => {
   const {
     businessName,
@@ -52,7 +133,7 @@ app.post("/api/draft-supplier-message", async (req, res) => {
     language,
   } = req.body || {};
 
-  // Validate the fields needed for an accurate draft.
+  // validate the fields needed for an accurate draft
   if (
     typeof productName !== "string" ||
     !productName.trim() ||
@@ -80,8 +161,7 @@ app.post("/api/draft-supplier-message", async (req, res) => {
   }
 
   const inventoryData = {
-    businessName:
-      typeof businessName === "string" ? businessName : "",
+    businessName: typeof businessName === "string" ? businessName : "",
     productName: productName.trim(),
     currentStock,
     reorderLevel,
@@ -89,9 +169,7 @@ app.post("/api/draft-supplier-message", async (req, res) => {
     unit: unit.trim(),
     supplierName: supplierName.trim(),
     preferredGreeting:
-      typeof preferredGreeting === "string"
-        ? preferredGreeting
-        : "",
+      typeof preferredGreeting === "string" ? preferredGreeting : "",
     language:
       typeof language === "string" && language.trim()
         ? language.trim()
@@ -115,7 +193,7 @@ app.post("/api/draft-supplier-message", async (req, res) => {
 
     console.error(
       "Supplier message generation failed:",
-      error.code || error.name
+      error.code || error.name,
     );
 
     return res.status(502).json({
