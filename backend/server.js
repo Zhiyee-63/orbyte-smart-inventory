@@ -1,6 +1,6 @@
 const express = require("express");
 const { getMysqlPool } = require("./mysql");
-const { generateText } = require("./gemini");
+const { generateSupplierMessage } = require("./gemini");
 
 const app = express();
 const port = Number(process.env.PORT) || 3000;
@@ -39,30 +39,88 @@ app.get("/health/db", async (_req, res) => {
   }
 });
 
-app.post("/api/gemini", async (req, res) => {
-  const prompt = req.body?.prompt;
+app.post("/api/draft-supplier-message", async (req, res) => {
+  const {
+    businessName,
+    productName,
+    currentStock,
+    reorderLevel,
+    reorderQuantity,
+    unit,
+    supplierName,
+    preferredGreeting,
+    language,
+  } = req.body || {};
 
-  if (typeof prompt !== "string" || prompt.trim().length === 0) {
-    return res.status(400).json({ error: "prompt_required" });
+  // Validate the fields needed for an accurate draft.
+  if (
+    typeof productName !== "string" ||
+    !productName.trim() ||
+    typeof supplierName !== "string" ||
+    !supplierName.trim() ||
+    typeof unit !== "string" ||
+    !unit.trim() ||
+    !Number.isFinite(currentStock) ||
+    !Number.isFinite(reorderLevel) ||
+    !Number.isFinite(reorderQuantity) ||
+    currentStock < 0 ||
+    reorderLevel < 0 ||
+    reorderQuantity <= 0
+  ) {
+    return res.status(400).json({
+      error: "invalid_or_missing_inventory_data",
+    });
   }
 
-  if (prompt.length > 10_000) {
-    return res.status(413).json({ error: "prompt_too_large" });
+  if (currentStock >= reorderLevel) {
+    return res.status(409).json({
+      error: "reorder_not_required",
+      message: "Stock is not below the reorder threshold.",
+    });
   }
+
+  const inventoryData = {
+    businessName:
+      typeof businessName === "string" ? businessName : "",
+    productName: productName.trim(),
+    currentStock,
+    reorderLevel,
+    reorderQuantity,
+    unit: unit.trim(),
+    supplierName: supplierName.trim(),
+    preferredGreeting:
+      typeof preferredGreeting === "string"
+        ? preferredGreeting
+        : "",
+    language:
+      typeof language === "string" && language.trim()
+        ? language.trim()
+        : "English",
+  };
 
   try {
-    const result = await generateText(prompt.trim());
-    return res.json(result);
+    const result = await generateSupplierMessage(inventoryData);
+
+    return res.json({
+      status: "draft",
+      message: result.text,
+      requiresHumanApproval: true,
+    });
   } catch (error) {
     if (error.code === "GEMINI_API_KEY_MISSING") {
       return res.status(503).json({
         error: "gemini_not_configured",
-        missing: ["GEMINI_API_KEY"],
       });
     }
 
-    console.error("Gemini request failed:", error.code || error.name);
-    return res.status(502).json({ error: "gemini_request_failed" });
+    console.error(
+      "Supplier message generation failed:",
+      error.code || error.name
+    );
+
+    return res.status(502).json({
+      error: "draft_generation_failed",
+    });
   }
 });
 
