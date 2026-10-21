@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Express API
 
 ## Configuration
@@ -25,3 +26,6 @@ that is how the database is configured.
 
 The database and Gemini endpoints return a clear configuration error until
 their environment variables are set.
+=======
+# orbyte-smart-inventory
+>>>>>>> 298f9111a469fc345a5bd45e9f9e0d6d99d64360
