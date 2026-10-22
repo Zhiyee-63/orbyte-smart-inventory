@@ -1,13 +1,16 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 
-// TODO: Replace this with the live URL your Backend Developer gets from Replit!
-// Example: 'https://orbyte-backend.username.repl.co'
+// Your live backend Replit URL
 const BACKEND_URL = 'https://e18001d8-ab3c-4883-9464-81086cc8e9f0-00-95b61jke4hrr.sisko.replit.dev'; 
 
 function App() {
   const [barcode, setBarcode] = useState('');
   const [scanResult, setScanResult] = useState('');
+  
+  // Loading States for better UI
+  const [isScanning, setIsScanning] = useState(false);
+  const [isSending, setIsSending] = useState(false);
   
   // Modal & Log States
   const [showModal, setShowModal] = useState(false);
@@ -15,11 +18,9 @@ function App() {
   const [orderQuantity, setOrderQuantity] = useState(10);
   const [pendingItem, setPendingItem] = useState(null);
   const [activityLogs, setActivityLogs] = useState([]);
-
-  // Start with an empty inventory, let the backend provide the data
   const [inventory, setInventory] = useState([]);
 
-  // 1. Fetch initial inventory from the backend when the app loads
+  // Fetch initial inventory
   useEffect(() => {
     fetch(`${BACKEND_URL}/api/inventory`)
       .then(res => res.json())
@@ -27,51 +28,83 @@ function App() {
       .catch(err => console.error("Error fetching inventory:", err));
   }, []);
 
-  // 2. Send the barcode to the backend API when scanned
   const handleScan = async (e) => {
     e.preventDefault();
     if (!barcode) return;
 
+    setIsScanning(true);
     setScanResult(`Connecting to server for barcode: ${barcode}...`);
     
     try {
-      const response = await fetch(`${BACKEND_URL}/api/scan`, {
+      // 1. Process the scan
+      const scanResponse = await fetch(`${BACKEND_URL}/api/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ barcode })
       });
       
-      const data = await response.json();
+      const scanData = await scanResponse.json();
 
-      if (!response.ok) {
-        setScanResult(`❌ Error: ${data.error || 'Item not found'}`);
+      if (!scanResponse.ok) {
+        setScanResult(`❌ Error: ${scanData.error || 'Item not found'}`);
+        setIsScanning(false);
         return;
       }
 
-      // Update the local table with the exact data the server returned
+      // Temporarily update the UI while we check stock limits
       setInventory(prev => prev.map(item => 
-        item.barcode === barcode ? data.updatedItem : item
+        item.barcode === barcode ? { ...item, stock: scanData.stock, status: scanData.status } : item
       ));
-      
-      // Trigger the Human Approval flow if the backend says stock hit the limit
-      if (data.updatedItem.stock === data.updatedItem.limit) {
-        setPendingItem({ ...data.updatedItem, currentStock: data.updatedItem.stock });
-        setOrderQuantity(10); 
-        setEditableMessage(`Salam boss, ${data.updatedItem.name} kat kedai dah nak habis (tinggal ${data.updatedItem.stock} je). Boleh hantar 10 unit lagi secepat mungkin tak? Terima kasih.`);
-        setShowModal(true);
+
+      // 2. If stock hits the limit, request the AI Draft
+      if (scanData.alert === true) {
+        setScanResult(`⚠️ Low stock detected. Generating AI draft...`);
+        
+        // Find the full item details from our local state to send to Gemini
+        const itemDetails = inventory.find(i => i.barcode === barcode);
+        
+        const draftResponse = await fetch(`${BACKEND_URL}/api/draft-supplier-message`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            businessName: "Orbyte Kedai Runcit",
+            productName: itemDetails.name,
+            currentStock: scanData.stock,
+            reorderLevel: itemDetails.limit,
+            reorderQuantity: 10,
+            unit: "units",
+            supplierName: itemDetails.supplier,
+            preferredGreeting: "Salam boss",
+            language: "Malay"
+          })
+        });
+
+        const draftData = await draftResponse.json();
+
+        if (draftResponse.ok) {
+          setPendingItem({ ...itemDetails, stock: scanData.stock });
+          setOrderQuantity(10); 
+          setEditableMessage(draftData.message);
+          setShowModal(true);
+        } else {
+          setScanResult(`❌ AI Error: Failed to generate draft.`);
+        }
+      } else {
+        setScanResult('✅ Sale recorded. Stock is OK.');
       }
       
-      setScanResult('✅ Sale recorded. Stock updated in database.');
       setBarcode('');
       
     } catch (error) {
       console.error("Scan error:", error);
       setScanResult('❌ Failed to connect to the backend server.');
+    } finally {
+      setIsScanning(false);
     }
   };
 
-  // 3. Send the approved order to the backend API
   const handleApprove = async () => {
+    setIsSending(true);
     try {
       const response = await fetch(`${BACKEND_URL}/api/approve`, {
         method: 'POST',
@@ -81,29 +114,32 @@ function App() {
           message: editableMessage,
           quantity: orderQuantity,
           supplier: pendingItem.supplier,
-          approvedBy: 'Admin (Pak Abu)' 
+          approved_by: 'Admin (Pak Abu)' 
         })
       });
 
       if (response.ok) {
-        // Record the action in the local Activity Log table
         const timestamp = new Date().toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' });
         const newLog = {
           id: Date.now(),
           time: timestamp,
           action: `Restock Order: ${orderQuantity}x ${pendingItem.name}`,
           supplier: pendingItem.supplier,
-          status: 'Message Sent',
+          status: 'WhatsApp Sent',
           approvedBy: 'Admin (Pak Abu)'
         };
         setActivityLogs(prevLogs => [newLog, ...prevLogs]);
 
         setShowModal(false);
-        setScanResult(`✅ API SUCCESS: Replenishment order sent to ${pendingItem.supplier}.`);
+        setScanResult(`✅ LOGGED: Replenishment order sent to ${pendingItem.supplier} via Twilio.`);
+      } else {
+        alert("Failed to send WhatsApp message via Twilio.");
       }
     } catch (error) {
       console.error("Approve error:", error);
-      alert("Failed to send the approval to the server.");
+      alert("Failed to connect to the server.");
+    } finally {
+      setIsSending(false);
     }
   };
 
@@ -119,14 +155,15 @@ function App() {
             type="text" 
             value={barcode}
             onChange={(e) => setBarcode(e.target.value)}
-            placeholder="Try scanning: 955102" 
+            placeholder="Try scanning a barcode..." 
+            disabled={isScanning}
             style={{ padding: '10px', marginRight: '10px', width: '250px', fontSize: '16px', border: '1px solid #ccc', borderRadius: '4px' }}
           />
-          <button type="submit" style={{ padding: '10px 20px', cursor: 'pointer', fontSize: '16px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}>
-            Record Sale
+          <button type="submit" disabled={isScanning} style={{ padding: '10px 20px', cursor: isScanning ? 'not-allowed' : 'pointer', fontSize: '16px', backgroundColor: isScanning ? '#ccc' : '#007bff', color: 'white', border: 'none', borderRadius: '4px' }}>
+            {isScanning ? 'Processing...' : 'Record Sale'}
           </button>
         </form>
-        {scanResult && <p style={{ fontWeight: 'bold', color: '#0056b3', marginTop: '10px' }}>{scanResult}</p>}
+        {scanResult && <p style={{ fontWeight: 'bold', color: scanResult.includes('❌') ? 'red' : '#0056b3', marginTop: '10px' }}>{scanResult}</p>}
       </div>
 
       <div className="inventory-section" style={{ marginBottom: '40px' }}>
@@ -200,17 +237,14 @@ function App() {
         }}>
           <div style={{ backgroundColor: 'white', padding: '30px', borderRadius: '12px', width: '450px', boxShadow: '0 8px 16px rgba(0,0,0,0.2)' }}>
             <h2 style={{ marginTop: 0, color: '#dc3545' }}>⚠️ Low Stock Alert</h2>
-            <p><strong>{pendingItem.name}</strong> dropped to {pendingItem.limit}. A message has been drafted for <strong>{pendingItem.supplier}</strong>.</p>
+            <p><strong>{pendingItem.name}</strong> dropped to {pendingItem.limit}. The AI has drafted a message for <strong>{pendingItem.supplier}</strong>.</p>
             
             <div style={{ margin: '15px 0' }}>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Adjust Restock Quantity:</label>
               <input 
                 type="number" 
                 value={orderQuantity} 
-                onChange={(e) => {
-                  setOrderQuantity(e.target.value);
-                  setEditableMessage(`Salam boss, ${pendingItem.name} kat kedai dah nak habis (tinggal ${pendingItem.currentStock} je). Boleh hantar ${e.target.value} unit lagi secepat mungkin tak? Terima kasih.`);
-                }}
+                onChange={(e) => setOrderQuantity(e.target.value)}
                 style={{ padding: '8px', width: '100px', fontSize: '16px', border: '1px solid #ccc', borderRadius: '4px' }}
               />
             </div>
@@ -220,17 +254,17 @@ function App() {
               <textarea 
                 value={editableMessage}
                 onChange={(e) => setEditableMessage(e.target.value)}
-                rows="4"
+                rows="5"
                 style={{ width: '100%', padding: '10px', fontSize: '14px', borderRadius: '4px', border: '1px solid #ccc', resize: 'none', boxSizing: 'border-box' }}
               />
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
-              <button onClick={() => setShowModal(false)} style={{ padding: '10px 15px', cursor: 'pointer', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', fontSize: '14px' }}>
+              <button onClick={() => setShowModal(false)} disabled={isSending} style={{ padding: '10px 15px', cursor: isSending ? 'not-allowed' : 'pointer', backgroundColor: '#6c757d', color: 'white', border: 'none', borderRadius: '4px', fontSize: '14px' }}>
                 Cancel / Edit Later
               </button>
-              <button onClick={handleApprove} style={{ padding: '10px 15px', cursor: 'pointer', backgroundColor: '#28a745', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', fontSize: '14px' }}>
-                Approve & Send Order
+              <button onClick={handleApprove} disabled={isSending} style={{ padding: '10px 15px', cursor: isSending ? 'not-allowed' : 'pointer', backgroundColor: isSending ? '#ccc' : '#28a745', color: 'white', border: 'none', borderRadius: '4px', fontWeight: 'bold', fontSize: '14px' }}>
+                {isSending ? 'Sending via Twilio...' : 'Approve & Send Order'}
               </button>
             </div>
           </div>
