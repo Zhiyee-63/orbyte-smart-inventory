@@ -1,6 +1,7 @@
 const express = require("express");
 const { getMysqlPool } = require("./mysql");
 const { generateSupplierMessage } = require("./gemini");
+const twilio = require("twilio");
 
 const app = express();
 const port = Number(process.env.PORT) || 3000;
@@ -50,14 +51,14 @@ app.post("/api/scan", async (req, res) => {
   try {
     const pool = getMysqlPool();
     const [result] = await pool.query(
-      "UPDATE products SET stock = stock - 1 WHERE barcode = ? AND stock > 0",
+      "UPDATE Products SET stock = stock - 1 WHERE barcode = ? AND stock > 0",
       [barcode],
     );
     if (result.affectedRows === 0) {
       return res.status(404).json({ error: "not_found_or_out_of_stock" });
     }
     const [[row]] = await pool.query(
-      "SELECT stock FROM products WHERE barcode = ?",
+      "SELECT stock FROM Products WHERE barcode = ?",
       [barcode],
     );
     const status = stockStatus(row.stock);
@@ -76,7 +77,7 @@ app.post("/api/scan", async (req, res) => {
 app.get("/api/inventory", async (_req, res) => {
   try {
     const [rows] = await getMysqlPool().query(
-      "SELECT barcode, name, stock FROM products ORDER BY name",
+      "SELECT barcode, name, stock FROM Products ORDER BY name",
     );
     return res.json(rows.map((r) => ({ ...r, status: stockStatus(r.stock) })));
   } catch (error) {
@@ -99,15 +100,27 @@ app.post("/api/approve", async (req, res) => {
   try {
     const pool = getMysqlPool();
     const [rows] = await pool.query(
-      "SELECT name FROM products WHERE barcode = ?",
+      "SELECT name FROM Products WHERE barcode = ?",
       [barcode],
     );
     if (rows.length === 0)
       return res.status(404).json({ error: "product_not_found" });
 
-    // send Whatsapp message
+    // Initialize Twilio client
+    const twilioClient = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN,
+    );
+
+    // Send the WhatsApp message
+    await twilioClient.messages.create({
+      body: `Approval logged! Product barcode ${barcode} was approved by ${approvedBy}. Please process the restock.`,
+      from: process.env.TWILIO_PHONE_NUMBER,
+      to: process.env.SUPPLIER_PHONE_NUMBER,
+    });
+
     await pool.query(
-      "INSERT INTO activity_log (barcode, action, approved_by) VALUES (?, 'approved', ?)",
+      "INSERT INTO Activity_Logs (barcode, action, approved_by) VALUES (?, 'approved', ?)",
       [barcode, approvedBy],
     );
     return res.json({
