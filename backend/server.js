@@ -41,7 +41,9 @@ app.get("/health/db", async (_req, res) => {
 });
 
 const LOW_STOCK_THRESHOLD = 5;
-const stockStatus = (stock) => (stock <= LOW_STOCK_THRESHOLD ? "Low" : "OK");
+// Low when stock is below each product's own reorder level (same rule as the AI endpoint)
+const stockStatus = (stock, reorderLevel) =>
+  stock < reorderLevel ? "Low" : "OK";
 
 app.post("/api/scan", async (req, res) => {
   const barcode =
@@ -58,10 +60,17 @@ app.post("/api/scan", async (req, res) => {
       return res.status(404).json({ error: "not_found_or_out_of_stock" });
     }
     const [[row]] = await pool.query(
-      "SELECT stock FROM Products WHERE barcode = ?",
+      "SELECT product_id, stock, reorder_level FROM Products WHERE barcode = ?",
       [barcode],
     );
-    const status = stockStatus(row.stock);
+
+    // record the sale in the log (so the AI can see sales trends)
+    await pool.query(
+      "INSERT INTO Activity_Logs (action_type, product_id, quantity, details, performed_by) VALUES ('SALE', ?, 1, 'Item scanned at POS', 'cashier')",
+      [row.product_id],
+    );
+
+    const status = stockStatus(row.stock, row.reorder_level);
     return res.json({
       barcode,
       stock: row.stock,
@@ -69,17 +78,22 @@ app.post("/api/scan", async (req, res) => {
       alert: status === "Low",
     });
   } catch (error) {
-    console.error("Scan failed:", error.code || error.name);
-    return res.status(500).json({ error: "scan_failed" });
+    console.error("SCAN ERROR:", error);
+    return res.status(500).json({ error: error.message });
   }
 });
 
 app.get("/api/inventory", async (_req, res) => {
   try {
     const [rows] = await getMysqlPool().query(
-      "SELECT barcode, name, stock FROM Products ORDER BY name",
+      "SELECT barcode, name, brand, category, unit, stock, reorder_level FROM Products ORDER BY name",
     );
-    return res.json(rows.map((r) => ({ ...r, status: stockStatus(r.stock) })));
+    return res.json(
+      rows.map((r) => ({
+        ...r,
+        status: stockStatus(r.stock, r.reorder_level),
+      })),
+    );
   } catch (error) {
     console.error("Inventory failed:", error.code || error.name);
     return res.status(500).json({ error: "inventory_failed" });
@@ -98,13 +112,17 @@ app.post("/api/approve", async (req, res) => {
   }
 
   try {
-    const pool = getMysqlPool();
+    const pool = getMysqlPool(); // <-- 1. You must define the pool first!
     const [rows] = await pool.query(
-      "SELECT name FROM Products WHERE barcode = ?",
+      "SELECT product_id, name FROM Products WHERE barcode = ?",
       [barcode],
     );
     if (rows.length === 0)
       return res.status(404).json({ error: "product_not_found" });
+
+    const productId = rows[0].product_id; // <-- 2. You forgot to add this line back in!
+
+    // Initialize Twilio client
 
     // Initialize Twilio client
     const twilioClient = twilio(
@@ -120,9 +138,16 @@ app.post("/api/approve", async (req, res) => {
     });
 
     await pool.query(
-      "INSERT INTO Activity_Logs (barcode, action, approved_by) VALUES (?, 'approved', ?)",
-      [barcode, approvedBy],
+      "INSERT INTO Activity_Logs (action_type, product_id, details, performed_by) VALUES ('APPROVED', ?, 'Owner approved the restock order', ?)",
+      [productId, approvedBy],
     );
+
+    // show "Restock Ordered" on the dashboard
+    await pool.query(
+      "UPDATE Products SET status = 'restock_ordered' WHERE product_id = ?",
+      [productId],
+    );
+
     return res.json({
       status: "ok",
       message: "Approved and logged (WhatsApp not connected yet)",
