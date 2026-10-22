@@ -2,8 +2,10 @@ const express = require("express");
 const { getMysqlPool } = require("./mysql");
 const { generateSupplierMessage } = require("./gemini");
 const twilio = require("twilio");
+const cors = require("cors");
 
 const app = express();
+app.use(cors());
 const port = Number(process.env.PORT) || 3000;
 
 app.use(express.json({ limit: "16kb" }));
@@ -123,8 +125,6 @@ app.post("/api/approve", async (req, res) => {
     const productId = rows[0].product_id; // <-- 2. You forgot to add this line back in!
 
     // Initialize Twilio client
-
-    // Initialize Twilio client
     const twilioClient = twilio(
       process.env.TWILIO_ACCOUNT_SID,
       process.env.TWILIO_AUTH_TOKEN,
@@ -150,11 +150,11 @@ app.post("/api/approve", async (req, res) => {
 
     return res.json({
       status: "ok",
-      message: "Approved and logged (WhatsApp not connected yet)",
+      message: "Approved, logged, and supplier notified via WhatsApp",
     });
   } catch (error) {
-    console.error("Approve failed:", error.code || error.name);
-    return res.status(500).json({ error: "approve_failed" });
+    console.error("APPROVE ERROR:", error);
+    return res.status(500).json({ error: error.message });
   }
 });
 
