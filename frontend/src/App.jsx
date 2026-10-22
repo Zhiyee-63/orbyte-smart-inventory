@@ -1,73 +1,110 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
+
+// TODO: Replace this with the live URL your Backend Developer gets from Replit!
+// Example: 'https://orbyte-backend.username.repl.co'
+const BACKEND_URL = 'https://e18001d8-ab3c-4883-9464-81086cc8e9f0-00-95b61jke4hrr.sisko.replit.dev'; 
 
 function App() {
   const [barcode, setBarcode] = useState('');
   const [scanResult, setScanResult] = useState('');
   
-  // Modal states for Human Approval
+  // Modal & Log States
   const [showModal, setShowModal] = useState(false);
   const [editableMessage, setEditableMessage] = useState('');
   const [orderQuantity, setOrderQuantity] = useState(10);
   const [pendingItem, setPendingItem] = useState(null);
-
-  // Activity Log State
   const [activityLogs, setActivityLogs] = useState([]);
 
-  // Updated synthetic data for a Malaysian Kedai Runcit
-  const [inventory, setInventory] = useState([
-    { barcode: '955101', name: 'Maggi Kari (5 packs)', stock: 24, limit: 10, supplier: 'Pemborong Ali', status: 'Good' },
-    { barcode: '955102', name: 'Beras Jasmine 10kg', stock: 6, limit: 5, supplier: 'Ah Seng Distributors', status: 'Good' },
-    { barcode: '955103', name: 'Minyak Masak Cap Buruh 5kg', stock: 8, limit: 5, supplier: 'Hup Seng', status: 'Good' }
-  ]);
+  // Start with an empty inventory, let the backend provide the data
+  const [inventory, setInventory] = useState([]);
 
+  // 1. Fetch initial inventory from the backend when the app loads
+  useEffect(() => {
+    fetch(`${BACKEND_URL}/api/inventory`)
+      .then(res => res.json())
+      .then(data => setInventory(data))
+      .catch(err => console.error("Error fetching inventory:", err));
+  }, []);
+
+  // 2. Send the barcode to the backend API when scanned
   const handleScan = async (e) => {
     e.preventDefault();
     if (!barcode) return;
 
-    setScanResult(`Recording sale for barcode: ${barcode}...`);
+    setScanResult(`Connecting to server for barcode: ${barcode}...`);
     
-    setTimeout(() => {
-      setInventory(prev => prev.map(item => {
-        if (item.barcode === barcode) {
-          const newStock = item.stock - 1;
-          const newStatus = newStock <= item.limit ? 'Low' : 'Good';
-          
-          if (newStock === item.limit) {
-            setPendingItem({ ...item, currentStock: newStock }); // Pass the updated stock
-            setOrderQuantity(10); 
-            setEditableMessage(`Salam boss, ${item.name} kat kedai dah nak habis (tinggal ${newStock} je). Boleh hantar 10 unit lagi secepat mungkin tak? Terima kasih.`);
-            setShowModal(true);
-          }
-          
-          return { ...item, stock: newStock, status: newStatus };
-        }
-        return item;
-      }));
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/scan`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ barcode })
+      });
       
-      setScanResult('Sale recorded. Stock updated automatically.');
+      const data = await response.json();
+
+      if (!response.ok) {
+        setScanResult(`❌ Error: ${data.error || 'Item not found'}`);
+        return;
+      }
+
+      // Update the local table with the exact data the server returned
+      setInventory(prev => prev.map(item => 
+        item.barcode === barcode ? data.updatedItem : item
+      ));
+      
+      // Trigger the Human Approval flow if the backend says stock hit the limit
+      if (data.updatedItem.stock === data.updatedItem.limit) {
+        setPendingItem({ ...data.updatedItem, currentStock: data.updatedItem.stock });
+        setOrderQuantity(10); 
+        setEditableMessage(`Salam boss, ${data.updatedItem.name} kat kedai dah nak habis (tinggal ${data.updatedItem.stock} je). Boleh hantar 10 unit lagi secepat mungkin tak? Terima kasih.`);
+        setShowModal(true);
+      }
+      
+      setScanResult('✅ Sale recorded. Stock updated in database.');
       setBarcode('');
-    }, 800);
+      
+    } catch (error) {
+      console.error("Scan error:", error);
+      setScanResult('❌ Failed to connect to the backend server.');
+    }
   };
 
-  const handleApprove = () => {
-    // 1. Create a new log entry
-    const timestamp = new Date().toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' });
-    const newLog = {
-      id: Date.now(),
-      time: timestamp,
-      action: `Restock Order: ${orderQuantity}x ${pendingItem.name}`,
-      supplier: pendingItem.supplier,
-      status: 'Message Sent',
-      approvedBy: 'Admin (Pak Abu)' // Simulates Role-Based Access Control (RBAC)
-    };
+  // 3. Send the approved order to the backend API
+  const handleApprove = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          barcode: pendingItem.barcode,
+          message: editableMessage,
+          quantity: orderQuantity,
+          supplier: pendingItem.supplier,
+          approvedBy: 'Admin (Pak Abu)' 
+        })
+      });
 
-    // 2. Add it to the top of the activity log array
-    setActivityLogs(prevLogs => [newLog, ...prevLogs]);
+      if (response.ok) {
+        // Record the action in the local Activity Log table
+        const timestamp = new Date().toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' });
+        const newLog = {
+          id: Date.now(),
+          time: timestamp,
+          action: `Restock Order: ${orderQuantity}x ${pendingItem.name}`,
+          supplier: pendingItem.supplier,
+          status: 'Message Sent',
+          approvedBy: 'Admin (Pak Abu)'
+        };
+        setActivityLogs(prevLogs => [newLog, ...prevLogs]);
 
-    // 3. Close modal and show success message
-    setShowModal(false);
-    setScanResult(`✅ LOGGED: Replenishment order for ${orderQuantity}x ${pendingItem.name} sent to ${pendingItem.supplier}.`);
+        setShowModal(false);
+        setScanResult(`✅ API SUCCESS: Replenishment order sent to ${pendingItem.supplier}.`);
+      }
+    } catch (error) {
+      console.error("Approve error:", error);
+      alert("Failed to send the approval to the server.");
+    }
   };
 
   return (
@@ -94,35 +131,38 @@ function App() {
 
       <div className="inventory-section" style={{ marginBottom: '40px' }}>
         <h2>Live Stock Dashboard</h2>
-        <table border="1" cellPadding="12" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', backgroundColor: 'white' }}>
-          <thead>
-            <tr style={{ backgroundColor: '#e9ecef' }}>
-              <th>Barcode</th>
-              <th>Product Name</th>
-              <th>Current Stock</th>
-              <th>Alert Limit</th>
-              <th>Supplier</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {inventory.map((item) => (
-              <tr key={item.barcode}>
-                <td>{item.barcode}</td>
-                <td>{item.name}</td>
-                <td style={{ fontSize: '18px' }}><strong>{item.stock}</strong></td>
-                <td>{item.limit}</td>
-                <td>{item.supplier}</td>
-                <td style={{ color: item.status === 'Low' ? '#dc3545' : '#28a745', fontWeight: 'bold' }}>
-                  {item.status === 'Low' ? '⚠️ Low Stock' : '✅ Good'}
-                </td>
+        {inventory.length === 0 ? (
+          <p>Loading inventory from server...</p>
+        ) : (
+          <table border="1" cellPadding="12" style={{ width: '100%', textAlign: 'left', borderCollapse: 'collapse', backgroundColor: 'white' }}>
+            <thead>
+              <tr style={{ backgroundColor: '#e9ecef' }}>
+                <th>Barcode</th>
+                <th>Product Name</th>
+                <th>Current Stock</th>
+                <th>Alert Limit</th>
+                <th>Supplier</th>
+                <th>Status</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {inventory.map((item) => (
+                <tr key={item.barcode}>
+                  <td>{item.barcode}</td>
+                  <td>{item.name}</td>
+                  <td style={{ fontSize: '18px' }}><strong>{item.stock}</strong></td>
+                  <td>{item.limit}</td>
+                  <td>{item.supplier}</td>
+                  <td style={{ color: item.status === 'Low' ? '#dc3545' : '#28a745', fontWeight: 'bold' }}>
+                    {item.status === 'Low' ? '⚠️ Low Stock' : '✅ Good'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
 
-      {/* New Activity Log Section */}
       <div className="activity-log-section">
         <h2>Activity & Audit Log</h2>
         {activityLogs.length === 0 ? (
@@ -153,7 +193,6 @@ function App() {
         )}
       </div>
 
-      {/* Upgraded Human Approval Modal */}
       {showModal && pendingItem && (
         <div style={{
           position: 'fixed', top: 0, left: 0, width: '100%', height: '100%',
