@@ -57,6 +57,14 @@ Jika maklumat tersedia, masukkan secara semula jadi:
 - Tarikh penghantaran jika telah ditentukan.
 - Penutup yang ringkas dan sopan.
 
+KEWAJIPAN MELENGKAPKAN MESEJ
+1. Hasilkan satu mesej WhatsApp yang lengkap.
+2. Pastikan mesej mempunyai sapaan, maklumat stok,
+   permintaan kuantiti pesanan dan penutup yang sesuai.
+3. Jangan berhenti di tengah ayat atau selepas menyebut nama produk.
+4. Semak bahawa jumlah pesanan dan unit dinyatakan dengan betul.
+5. Sasarkan panjang mesej sekitar 25 hingga 50 patah perkataan.
+
 CONTOH INPUT
 {
   "businessName": "Kedai Runcit Maju",
@@ -93,7 +101,6 @@ Jangan sertakan tajuk, penerangan tambahan, tanda petikan atau
 format Markdown.
 `;
 
-
 function getGeminiClient() {
   const apiKey = process.env.GEMINI_API_KEY;
 
@@ -121,7 +128,8 @@ async function generateSupplierMessage(data) {
     store: false,
 
     generation_config: {
-      max_output_tokens: 300,
+      max_output_tokens: 500,
+      thinking_level: "minimal",
     },
   });
 
@@ -129,6 +137,18 @@ async function generateSupplierMessage(data) {
 
   if (!text) {
     throw new Error("Gemini returned an empty message");
+  }
+
+  // Reject obviously incomplete drafts rather than returning them.
+  const mentionsQuantity = text.includes(String(data.reorderQuantity));
+  const mentionsUnit = text
+    .toLowerCase()
+    .includes(String(data.unit).toLowerCase());
+
+  if (!mentionsQuantity || !mentionsUnit) {
+    const error = new Error("Gemini returned an incomplete draft");
+    error.code = "GEMINI_INCOMPLETE_DRAFT";
+    throw error;
   }
 
   return { text };

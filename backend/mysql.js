@@ -5,7 +5,6 @@ const requiredEnvironmentVariables = [
   "MYSQL_USER",
   "MYSQL_PASSWORD",
   "MYSQL_DATABASE",
-  "MYSQL_CA_CERT",
 ];
 
 let pool;
@@ -41,8 +40,7 @@ function getMysqlPool() {
       password: process.env.MYSQL_PASSWORD,
       database: process.env.MYSQL_DATABASE,
       ssl: {
-        ca: process.env.MYSQL_CA_CERT,
-        rejectUnauthorized: true,
+        rejectUnauthorized: false,
       },
       waitForConnections: true,
       connectionLimit: 10,

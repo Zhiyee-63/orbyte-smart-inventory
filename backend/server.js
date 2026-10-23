@@ -109,40 +109,50 @@ app.post("/api/approve", async (req, res) => {
     typeof req.body?.approved_by === "string"
       ? req.body.approved_by.trim()
       : "";
+
   if (!barcode || !approvedBy) {
     return res.status(400).json({ error: "barcode_and_approved_by_required" });
   }
 
   try {
-    const pool = getMysqlPool(); // <-- 1. You must define the pool first!
+    const pool = getMysqlPool();
+
+    // 1. Fetch product details from MySQL
     const [rows] = await pool.query(
       "SELECT product_id, name FROM Products WHERE barcode = ?",
       [barcode],
     );
-    if (rows.length === 0)
+
+    if (rows.length === 0) {
       return res.status(404).json({ error: "product_not_found" });
+    }
 
-    const productId = rows[0].product_id; // <-- 2. You forgot to add this line back in!
+    const productId = rows[0].product_id;
+    const productName = rows[0].name;
 
-    // Initialize Twilio client
-    const twilioClient = twilio(
-      process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN,
-    );
+    // 2. Try sending WhatsApp via Twilio (wrapped so failure won't stop DB updates)
+    try {
+      const twilioClient = twilio(
+        process.env.TWILIO_ACCOUNT_SID,
+        process.env.TWILIO_AUTH_TOKEN,
+      );
 
-    // Send the WhatsApp message
-    await twilioClient.messages.create({
-      body: `Approval logged! Product barcode ${barcode} was approved by ${approvedBy}. Please process the restock.`,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: process.env.SUPPLIER_PHONE_NUMBER,
-    });
+      await twilioClient.messages.create({
+        body: `Approval logged! Product ${productName} (barcode: ${barcode}) was approved by ${approvedBy}. Please process the restock.`,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: process.env.SUPPLIER_PHONE_NUMBER,
+      });
+    } catch (twilioErr) {
+      console.log("Twilio send skipped/failed:", twilioErr.message);
+    }
 
+    // 3. Log activity in database
     await pool.query(
       "INSERT INTO Activity_Logs (action_type, product_id, details, performed_by) VALUES ('APPROVED', ?, 'Owner approved the restock order', ?)",
       [productId, approvedBy],
     );
 
-    // show "Restock Ordered" on the dashboard
+    // 4. Update status in database
     await pool.query(
       "UPDATE Products SET status = 'restock_ordered' WHERE product_id = ?",
       [productId],
@@ -150,7 +160,7 @@ app.post("/api/approve", async (req, res) => {
 
     return res.json({
       status: "ok",
-      message: "Approved, logged, and supplier notified via WhatsApp",
+      message: "Approved, logged, and supplier notification attempted",
     });
   } catch (error) {
     console.error("APPROVE ERROR:", error);
@@ -229,10 +239,7 @@ app.post("/api/draft-supplier-message", async (req, res) => {
       });
     }
 
-    console.error(
-      "Supplier message generation failed:",
-      error.code || error.name,
-    );
+    console.error("Supplier message generation failed:", error);
 
     return res.status(502).json({
       error: "draft_generation_failed",
