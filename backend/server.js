@@ -1,7 +1,6 @@
 const express = require("express");
 const { getMysqlPool } = require("./mysql");
 const { generateSupplierMessage } = require("./gemini");
-const twilio = require("twilio");
 const cors = require("cors");
 
 const app = express();
@@ -80,7 +79,7 @@ app.post("/api/scan", async (req, res) => {
     });
   } catch (error) {
     console.error("SCAN ERROR:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "scan_failed" });
   }
 });
 
@@ -121,72 +120,88 @@ app.post("/api/approve", async (req, res) => {
   try {
     const pool = getMysqlPool();
 
-    // 1. Fetch product details from MySQL
+    // 1. Product + its own supplier (change s.phone if your column is named differently)
     const [rows] = await pool.query(
-      "SELECT product_id, name FROM Products WHERE barcode = ?",
+      `SELECT p.product_id, p.name, p.stock, p.reorder_level, p.status,
+              s.whatsapp AS supplier_phone
+       FROM Products p
+       JOIN Suppliers s ON s.supplier_id = p.supplier_id
+       WHERE p.barcode = ?`,
       [barcode],
     );
-
     if (rows.length === 0) {
       return res.status(404).json({ error: "product_not_found" });
     }
 
-    const productId = rows[0].product_id;
-    const productName = rows[0].name;
-
-    // kapso for whatsapp
-    try {
-      const messageText =
-        typeof req.body?.message === "string" && req.body.message.trim()
-          ? req.body.message.trim()
-          : `Approval logged! Product ${productName} (barcode: ${barcode}) was approved by ${approvedBy}. Please process the restock.`;
-
-      const response = await fetch(
-        `https://api.kapso.ai/meta/whatsapp/v24.0/${process.env.KAPSO_PHONE_NUMBER_ID}/messages`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-API-Key": process.env.KAPSO_API_KEY,
-          },
-          body: JSON.stringify({
-            messaging_product: "whatsapp",
-            recipient_type: "individual",
-            to: String(process.env.SUPPLIER_PHONE_NUMBER).replace(/\D/g, ""),
-            type: "text",
-            text: { body: messageText },
-          }),
-        },
-      );
-      if (!response.ok) {
-        throw new Error(`Kapso ${response.status}: ${await response.text()}`);
-      }
-    } catch (err) {
-      console.log("WhatsApp send skipped/failed:", err.message);
+    const product = rows[0];
+    if (product.stock >= product.reorder_level) {
+      return res.status(409).json({ error: "reorder_not_required" });
+    }
+    if (product.status === "restock_ordered") {
+      return res.status(409).json({ error: "already_ordered" });
     }
 
-    // 3. Log activity in database
+    // that supplier's number, with the secret as a testing fallback
+    const supplierPhone = String(
+      product.supplier_phone || process.env.SUPPLIER_PHONE_NUMBER || "",
+    ).replace(/\D/g, "");
+    if (!supplierPhone) {
+      return res.status(422).json({ error: "supplier_phone_missing" });
+    }
+
+    // 2. Send WhatsApp via Kapso
+    const messageText =
+      typeof req.body?.message === "string" && req.body.message.trim()
+        ? req.body.message.trim()
+        : `Approval logged! Product ${product.name} (barcode: ${barcode}) was approved by ${approvedBy}. Please process the restock.`;
+
+    const response = await fetch(
+      `https://api.kapso.ai/meta/whatsapp/v24.0/${process.env.KAPSO_PHONE_NUMBER_ID}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-API-Key": process.env.KAPSO_API_KEY,
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          recipient_type: "individual",
+          to: supplierPhone,
+          type: "text",
+          text: { body: messageText },
+        }),
+      },
+    );
+    if (!response.ok) {
+      console.error(
+        "WhatsApp send failed:",
+        response.status,
+        await response.text(),
+        "to number ending",
+        supplierPhone.slice(-4),
+      );
+      return res.status(502).json({ error: "whatsapp_failed" });
+    }
+
+    // 3. Log it, 4. mark as ordered (only reached if the message was sent)
     await pool.query(
       "INSERT INTO Activity_Logs (action_type, product_id, details, performed_by) VALUES ('APPROVED', ?, 'Owner approved the restock order', ?)",
-      [productId, approvedBy],
+      [product.product_id, approvedBy],
     );
-
-    // 4. Update status in database
     await pool.query(
       "UPDATE Products SET status = 'restock_ordered' WHERE product_id = ?",
-      [productId],
+      [product.product_id],
     );
 
     return res.json({
       status: "ok",
-      message: "Approved, logged, and supplier notification attempted",
+      message: "Approved, logged, and supplier notified via WhatsApp",
     });
   } catch (error) {
     console.error("APPROVE ERROR:", error);
-    return res.status(500).json({ error: error.message });
+    return res.status(500).json({ error: "approve_failed" });
   }
 });
-
 app.post("/api/draft-supplier-message", async (req, res) => {
   const {
     businessName,
