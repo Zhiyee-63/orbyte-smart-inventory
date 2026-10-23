@@ -1,0 +1,1 @@
+- [Express startup errors](express-startup-errors.md) — Express 5 can report bind failures through the listen callback; success logging must check its error argument.
