@@ -42,7 +42,6 @@ app.get("/health/db", async (_req, res) => {
   }
 });
 
-const LOW_STOCK_THRESHOLD = 5;
 // Low when stock is below each product's own reorder level (same rule as the AI endpoint)
 const stockStatus = (stock, reorderLevel) =>
   stock < reorderLevel ? "Low" : "OK";
@@ -88,7 +87,12 @@ app.post("/api/scan", async (req, res) => {
 app.get("/api/inventory", async (_req, res) => {
   try {
     const [rows] = await getMysqlPool().query(
-      "SELECT barcode, name, brand, category, unit, stock, reorder_level FROM Products ORDER BY name",
+      `SELECT p.barcode, p.name, p.brand, p.category, p.unit, p.stock,
+              p.reorder_level, p.reorder_quantity,
+              s.name AS supplier, s.preferred_greeting, s.language
+       FROM Products p
+       JOIN Suppliers s ON s.supplier_id = p.supplier_id
+       ORDER BY p.name`,
     );
     return res.json(
       rows.map((r) => ({
@@ -130,20 +134,35 @@ app.post("/api/approve", async (req, res) => {
     const productId = rows[0].product_id;
     const productName = rows[0].name;
 
-    // 2. Try sending WhatsApp via Twilio (wrapped so failure won't stop DB updates)
+    // kapso for whatsapp
     try {
-      const twilioClient = twilio(
-        process.env.TWILIO_ACCOUNT_SID,
-        process.env.TWILIO_AUTH_TOKEN,
-      );
+      const messageText =
+        typeof req.body?.message === "string" && req.body.message.trim()
+          ? req.body.message.trim()
+          : `Approval logged! Product ${productName} (barcode: ${barcode}) was approved by ${approvedBy}. Please process the restock.`;
 
-      await twilioClient.messages.create({
-        body: `Approval logged! Product ${productName} (barcode: ${barcode}) was approved by ${approvedBy}. Please process the restock.`,
-        from: process.env.TWILIO_PHONE_NUMBER,
-        to: process.env.SUPPLIER_PHONE_NUMBER,
-      });
-    } catch (twilioErr) {
-      console.log("Twilio send skipped/failed:", twilioErr.message);
+      const response = await fetch(
+        `https://api.kapso.ai/meta/whatsapp/v24.0/${process.env.KAPSO_PHONE_NUMBER_ID}/messages`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": process.env.KAPSO_API_KEY,
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            recipient_type: "individual",
+            to: String(process.env.SUPPLIER_PHONE_NUMBER).replace(/\D/g, ""),
+            type: "text",
+            text: { body: messageText },
+          }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`Kapso ${response.status}: ${await response.text()}`);
+      }
+    } catch (err) {
+      console.log("WhatsApp send skipped/failed:", err.message);
     }
 
     // 3. Log activity in database
