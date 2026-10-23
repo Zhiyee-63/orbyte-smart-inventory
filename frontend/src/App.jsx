@@ -81,8 +81,8 @@ function App() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            businessName: "Kedai Runcit Pak Ali",
-            productName: SHOP_NAME,
+            businessName: SHOP_NAME,
+            productName: itemDetails.name,
             currentStock: scanData.stock,
             reorderLevel: itemDetails.reorder_level,
             reorderQuantity: itemDetails.reorder_quantity,
