@@ -21,7 +21,7 @@
 | ----------------- | ---------------------------------------------- |
 | GitHub Repository | https://github.com/Zhiyee-63/orbyte-smart-inventory |
 | Live Demo         | https://e18001d8-ab3c-4883-9464-81086cc8e9f0-00-95b61jke4hrr.sisko.replit.dev |
-| Slide Deck        | https://drive.google.com/file/d/1-7fuNUfnfG1_vIWEsT6uNC2K3SuZ4k3u/view?usp=sharing            |
+| Slide Deck        | submission/SDC2026_Pentagrammers_SlideDeck.pdf   |
 | Demo Video        | https://youtu.be/xlp8Vu2SR0k                        |
 
 ---
@@ -49,7 +49,7 @@ The **Orbyte Smart Reorder Assistant** bridges Point of Sale activity directly t
 | Layer         | Technology                  |
 | ------------- | ---------------------------- |
 | Frontend      | React 18, Vite, `html5-qrcode` |
-| Backend       | Node.js, Express.js         |
+| Backend       | Node.js, Express.js REST API         |
 | Database      | MySQL 8 (Aiven Cloud)        |
 | AI / Compute  | Google Gemini API (`@google/genai`) |
 | Hosting / Dev | Replit Cloud                |
@@ -172,13 +172,13 @@ Hosting: The backend REST API is hosted on Replit, providing a stable .replit.de
 
 Secrets: API credentials (Gemini API key, MySQL passwords) are securely stored using Replit Secrets.
 
-📄 Proof of use: [`submission/SDC2026_TeamName_Replit_POU.pdf`](submission/SDC2026_TeamName_Replit_POU.pdf)
+📄 Proof of use: [`submission/SDC2026_Pentagrammers_Replit_POU.pdf`](submission/SDC2026_Pentagrammers_Replit_POU.pdf)
 
 ## How We Use RunPod *(Required)*
 
 Workload Status: N/A — Our project utilizes the cloud-hosted Google Gemini API (@google/genai SDK, gemini-2.5-flash) directly via Replit rather than self-hosted GPU containers on RunPod.
 
-📄 Proof of use: [`submission/SDC2026_TeamName_Replit_POU.pdf`]
+📄 Proof of use: [`submission/SDC2026_Pentagrammers_TechDeclaration.pdf`]
 
 ---
 
@@ -215,10 +215,10 @@ Learning: Balancing deterministic rules (SQL stock math) with generative AI (Bah
 - [ ✓ ] Team name, domain (Domain 1 / Domain 2) and SDG track filled in
 - [ ✓ ] Slide deck link added
 - [ ✓ ] Demo video link added
-- [ ] Replit used, with proof of use in `submission/`
-- [ ] RunPod used, with proof of use in `submission/`
-- [ ] Preliminary submission completed (`SDC2026_TeamName_Preliminary.pdf`)
-- [ ] Technology declaration completed (`SDC2026_TeamName_TechDeclaration.pdf`)
+- [ ✓ ] Replit used, with proof of use in `submission/`
+- [ N/A ] RunPod used, with proof of use in `submission/`
+- [ ✓ ] Preliminary submission completed (`SDC2026_TeamName_Preliminary.pdf`)
+- [ ✓ ] Technology declaration completed (`SDC2026_TeamName_TechDeclaration.pdf`)
 - [ ✓ ] Submission files renamed with your team name (replace `TeamName`)
 - [ ✓ ] "How to Run" steps verified
 - [ ✓ ] No API keys or secrets committed to the repository
