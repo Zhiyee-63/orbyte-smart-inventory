@@ -109,9 +109,13 @@ The **Orbyte Smart Reorder Assistant** bridges Point of Sale activity directly t
 ### Architecture
 
 ```
-User ──► Replit (App / API) ──► RunPod Endpoint (GPU model)
+User(POS/Camera Scan) ──► Replit (Express REST API) ──► MySQL 8 (AivenDB)
                 │
-                └──► Response returned to user
+                └──► Google Gemini API (Bahasa Melayu Draft)
+                │
+                └──► Human Approval Modal (Pak Abu)
+                │
+                └──► WhatsApp / Activity Audit Log
 ```
 
 ---
@@ -120,32 +124,37 @@ User ──► Replit (App / API) ──► RunPod Endpoint (GPU model)
 
 ### Option 1 — Run on Replit (Recommended)
 
-1. Open the [Replit Project](https://replit.com/@your-username/your-project), or import this repository via **Create Repl → Import from GitHub**.
-2. Open the **Secrets** tab (🔒) and add the variables listed in `.env.example`:
-   - `RUNPOD_API_KEY`
-   - `RUNPOD_ENDPOINT_ID`
-3. Click **Run**. Replit uses the `.replit` file to start `python src/main.py`.
+1. Open the Replit (https://replit.com/@dakhines34/AdmiredClosedMainframe) workspace or import this repository.
+2. Open the **Secrets** tab (🔒) and add your environment variables:
+   - `PORT=3000`
+   - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
+   - `GEMINI_API_KEY`
+   - `KAPSO_API_KEY`, `KAPSO_PHONE_NUMBER_ID`, `SUPPLIER_PHONE_NUMBER`
+3. Run `schema.sql` and `seed.sql` on your MySQL instance.
+4. Start the backend (`cd backend && node server.js`) and frontend (`cd frontend && npm run dev`).
 
 ### Option 2 — Run Locally
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/your-username/your-project.git
-cd your-project
+git clone https://github.com/Zhiyee-63/orbyte-smart-inventory.git
+cd orbyte-smart-inventory
 
-# 2. Create and activate a virtual environment
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
+# 2. Set up Database
+# Execute backend/database/schema.sql followed by backend/database/seed.sql on your MySQL 8 instance.
 
-# 3. Install dependencies
-pip install -r requirements.txt
+# 3. Run Backend
+cd backend
+npm install
+cp .env.example .env          # Fill in your Aiven MySQL and Gemini API keys
+node server.js
 
-# 4. Configure environment variables
-cp .env.example .env            # then fill in your values
+# 4. Run Frontend (in a separate terminal)
+cd ../frontend
+npm install
+npm run dev
 
-# 5. Run the app
-python src/main.py
-```
+# 5. Open http://localhost:5173 in your browser.
 
 ### Run Tests
 
@@ -157,11 +166,11 @@ python -m unittest discover tests
 
 ## How We Use Replit *(Required)*
 
-Describe how your team used Replit. For example:
+Development: Built and tested collaboratively in Replit with live database connectivity to Aiven MySQL.
 
-- **Development:** Collaborative coding in a shared Repl using Multiplayer.
-- **Hosting:** The app is deployed with Replit Deployments at the Live Demo link above.
-- **Secrets:** API keys are stored in Replit Secrets, never in the code.
+Hosting: The backend REST API is hosted on Replit, providing a stable .replit.dev endpoint for the React frontend.
+
+Secrets: API credentials (Gemini API key, MySQL passwords) are securely stored using Replit Secrets.
 
 📄 Proof of use: [`submission/SDC2026_TeamName_Replit_POU.pdf`](submission/SDC2026_TeamName_Replit_POU.pdf)
 
