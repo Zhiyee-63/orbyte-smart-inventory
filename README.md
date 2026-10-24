@@ -203,10 +203,10 @@ Learning: Balancing deterministic rules (SQL stock math) with generative AI (Bah
 | Name        | Role                | GitHub                                   |
 | ----------- | ------------------- | ---------------------------------------- |
 | Cha Zhi Yi | Team Lead / Frontend | [@Zhiyee-63](https://github.com/Zhiyee-63) |
-| DAKHINESWARAN A/L R MANIMARAN  | Backend | [DAKHINESWARAN](https://github.com/DAKHINESWARAN) |
-| LOOK ZHI HIN | AI    | [zhihin-ui](https://github.com/zhihin-ui) |
-| KIRANI NAURA WIJAYA  | Database   | [kirani16](https://github.com/kirani16) |
-| Yew Zhi Xuan | Pitch Deck | [zyew609](https://github.com/zyew609) |
+| DAKHINESWARAN A/L R MANIMARAN  | Backend | [@DAKHINESWARAN](https://github.com/DAKHINESWARAN) |
+| LOOK ZHI HIN | AI    | [@zhihin-ui](https://github.com/zhihin-ui) |
+| KIRANI NAURA WIJAYA  | Database   | [@kirani16](https://github.com/kirani16) |
+| Yew Zhi Xuan | Pitch Deck | [@zyew609](https://github.com/zyew609) |
 
 ---
 
