@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 
 const BACKEND_URL = 'https://e18001d8-ab3c-4883-9464-81086cc8e9f0-00-95b61jke4hrr.sisko.replit.dev';
-const SHOP_NAME = 'Kedai Runcit Pak Ali';
+const SHOP_NAME = 'Kedai Runcit Pak Abu';
 function App() {
   const [barcode, setBarcode] = useState('');
   const [scanResult, setScanResult] = useState('');
@@ -30,7 +30,7 @@ function App() {
       setInventoryError('');
     } catch (err) {
       console.error("Error fetching inventory:", err);
-      setInventoryError(`Cannot load inventory (${err.message}). Is the backend running?`);
+      setInventoryError(`Cannot load inventory (${err.message}).`);
     }
   };
 
@@ -128,7 +128,7 @@ function App() {
           message: editableMessage,
           quantity: Number(orderQuantity),
           supplier: pendingItem.supplier,
-          approved_by: 'Pak Ali'
+          approved_by: 'Pak Abu'
         })
       });
 
@@ -140,7 +140,7 @@ function App() {
           action: `Restock Order: ${orderQuantity}x ${pendingItem.name}`,
           supplier: pendingItem.supplier,
           status: 'WhatsApp Sent',
-          approvedBy: 'Pak Ali'
+          approvedBy: 'Pak Abu'
         };
         setActivityLogs(prevLogs => [newLog, ...prevLogs]);
 
