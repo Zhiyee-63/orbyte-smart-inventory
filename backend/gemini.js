@@ -117,41 +117,45 @@ function getGeminiClient() {
   return client;
 }
 
+const MODELS = [
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash",
+  "gemini-3.8-flash",
+];
+
 async function generateSupplierMessage(data) {
-  const interaction = await getGeminiClient().interactions.create({
-    model: process.env.GEMINI_MODEL || "gemini-3.8-flash",
+  let lastError;
 
-    system_instruction: SUPPLIER_SYSTEM_INSTRUCTION,
+  for (const model of MODELS) {
+    try {
+      const response = await getGeminiClient().models.generateContent({
+        model,
+        contents: JSON.stringify(data),
+        config: {
+          systemInstruction: SUPPLIER_SYSTEM_INSTRUCTION,
+          maxOutputTokens: 1024,
+        },
+      });
 
-    input: JSON.stringify(data),
+      const text = response.text?.trim();
+      if (!text) throw new Error("Gemini returned an empty message");
 
-    store: false,
-
-    generation_config: {
-      max_output_tokens: 500,
-      thinking_level: "minimal",
-    },
-  });
-
-  const text = interaction.output_text?.trim();
-
-  if (!text) {
-    throw new Error("Gemini returned an empty message");
+      console.log(`AI Generated Text (${model}):`, text);
+      return { text };
+    } catch (err) {
+      if (err.code === "GEMINI_API_KEY_MISSING") throw err;
+      console.error(
+        `Model ${model} failed:`,
+        err.status || err.code,
+        err.message,
+      );
+      lastError = err;
+    }
   }
 
-  // Reject obviously incomplete drafts rather than returning them.
-  const mentionsQuantity = text.includes(String(data.reorderQuantity));
-  const mentionsUnit = text
-    .toLowerCase()
-    .includes(String(data.unit).toLowerCase());
-
-  if (!mentionsQuantity || !mentionsUnit) {
-    const error = new Error("Gemini returned an incomplete draft");
-    error.code = "GEMINI_INCOMPLETE_DRAFT";
-    throw error;
-  }
-
-  return { text };
+  throw lastError;
 }
+
+module.exports = { generateSupplierMessage };
 
 module.exports = { generateSupplierMessage };

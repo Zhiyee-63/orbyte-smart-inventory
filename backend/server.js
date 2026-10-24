@@ -283,7 +283,10 @@ app.post("/api/draft-supplier-message", async (req, res) => {
 
 app.listen(port, "0.0.0.0", (error) => {
   if (error) {
-    console.error(`Server failed to listen on port ${port}:`, error.code || error.message);
+    console.error(
+      `Server failed to listen on port ${port}:`,
+      error.code || error.message,
+    );
     process.exitCode = 1;
     return;
   }
