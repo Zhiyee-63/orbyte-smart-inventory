@@ -58,69 +58,94 @@ The **Orbyte Smart Reorder Assistant** bridges Point of Sale activity directly t
 
 ## Project Structure
 
-├── docs/                     # Screenshots, architecture diagrams, Replit proof
+```
+.
+├── .agents/memory
 ├── backend/
-│   ├── database/             # schema.sql, seed.sql, queries.sql
-│   ├── gemini.js             # Google Gemini API integration & system instructions
-│   ├── mysql.js              # Aiven MySQL 8 connection pool
-│   ├── server.js             # Express REST API endpoints (/api/scan, /api/approve, etc.)
-│   └── package.json          # Backend dependencies
+│   └── database/
+         └── queries.sql
+         └── schema.sql
+         └── seed.sql
+   └── README.md
+   └── gemini.js
+   └── mysql.js
+   └── package-lock.json
+   └── package.json
+   └── server.js
 ├── frontend/
-│   ├── src/                  # React components (App.jsx, CameraTest.jsx, App.css)
-│   ├── index.html            # HTML entry point
-│   ├── vite.config.js        # Vite & proxy configuration
-│   └── package.json          # Frontend dependencies
-├── submission/               # Required submission documents (.pdf)
-├── .env.example              # Example environment variables
+    ├── public/
+          └── favicon.svg
+          └── icon.svg
+     ├── src/
+         └── assets/
+               └── hero.png
+               └── react.svg
+               └── vite.svg
+         └── App.css
+         └── App.jsx
+         └── CameraTest.jsx
+         └── index.css
+         └── main.jsx
+      ├── .gitignore
+      ├── README.md
+      ├── eslint.config.js
+      ├── index.html
+      ├── package-lock.json
+      ├── package.json
+      ├── vite.config.js
+├── submission/              # Required submission documents
+│   ├── SDC2026_Pentagrammers_Preliminary.pdf      # Preliminary submission
+│   ├── SDC2026_Pentagrammers_TechDeclaration.pdf  # Technology declaration
+│   ├── SDC2026_Pentagrammers_Replit_POU.pdf       # Replit proof of use
+│   └── SDC2026_Pentagrammers_SlideDeck.pdf      
+├── .env.example
 ├── .gitignore
-├── .replit                   # Replit run configuration
-├── LICENSE                   # Apache License 2.0
-└── README.md
+├── .replit                  # Replit run configuration
+├── LICENSE
+├── README.md
+└── package-lock.json
 ```
 
 ### Architecture
 
 ```
-User (POS / Camera Scan) ──► Replit (Express REST API) ──► MySQL 8 (Aiven DB)
-│
-└──► Google Gemini API (Bahasa Melayu Draft)
-│
-└──► Human Approval Modal (Pak Abu)
-│
-└──► WhatsApp / Activity Audit Log
+User ──► Replit (App / API) ──► RunPod Endpoint (GPU model)
+                │
+                └──► Response returned to user
 ```
 
 ---
+
 ## How to Run
 
 ### Option 1 — Run on Replit (Recommended)
 
-1. Open the Replit workspace or import this repository.
-2. Open the **Secrets** tab (🔒) and add your environment variables:
-   - `PORT=3000`
-   - `MYSQL_HOST`, `MYSQL_PORT`, `MYSQL_USER`, `MYSQL_PASSWORD`, `MYSQL_DATABASE`
-   - `GEMINI_API_KEY`
-   - `KAPSO_API_KEY`, `KAPSO_PHONE_NUMBER_ID`, `SUPPLIER_PHONE_NUMBER`
-3. Run `schema.sql` and `seed.sql` on your MySQL instance.
-4. Start the backend (`cd backend && node server.js`) and frontend (`cd frontend && npm run dev`).
+1. Open the [Replit Project](https://replit.com/@your-username/your-project), or import this repository via **Create Repl → Import from GitHub**.
+2. Open the **Secrets** tab (🔒) and add the variables listed in `.env.example`:
+   - `RUNPOD_API_KEY`
+   - `RUNPOD_ENDPOINT_ID`
+3. Click **Run**. Replit uses the `.replit` file to start `python src/main.py`.
 
 ### Option 2 — Run Locally
 
 ```bash
 # 1. Clone the repository
-git clone [https://github.com/Zhiyee-63/orbyte-smart-inventory.git](https://github.com/Zhiyee-63/orbyte-smart-inventory.git)
-cd orbyte-smart-inventory
+git clone https://github.com/your-username/your-project.git
+cd your-project
 
-# 2. Setup Backend
-cd backend
-npm install
-cp ../.env.example .env       # Fill in your Aiven MySQL & Gemini API keys
-node server.js                # Runs on port 3000
+# 2. Create and activate a virtual environment
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
 
-# 3. Setup Frontend (in a new terminal)
-cd frontend
-npm install
-npm run dev                   # Runs on http://localhost:5173
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Configure environment variables
+cp .env.example .env            # then fill in your values
+
+# 5. Run the app
+python src/main.py
+```
 
 ### Run Tests
 
@@ -129,3 +154,71 @@ python -m unittest discover tests
 ```
 
 ---
+
+## How We Use Replit *(Required)*
+
+Describe how your team used Replit. For example:
+
+- **Development:** Collaborative coding in a shared Repl using Multiplayer.
+- **Hosting:** The app is deployed with Replit Deployments at the Live Demo link above.
+- **Secrets:** API keys are stored in Replit Secrets, never in the code.
+
+📄 Proof of use: [`submission/SDC2026_TeamName_Replit_POU.pdf`](submission/SDC2026_TeamName_Replit_POU.pdf)
+
+## How We Use RunPod *(Required)*
+
+Describe how your team used RunPod. For example:
+
+- **Workload:** Model inference (e.g. text generation, image processing) runs on a RunPod GPU.
+- **Setup:** `runpod/handler.py` is deployed as a **RunPod Serverless Endpoint**.
+- **Integration:** The Replit app sends requests to the endpoint using `RUNPOD_API_KEY` and `RUNPOD_ENDPOINT_ID`.
+
+Example request:
+
+```bash
+curl -X POST https://api.runpod.ai/v2/$RUNPOD_ENDPOINT_ID/runsync \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input": {"prompt": "Hello"}}'
+```
+
+📄 Proof of use: [`submission/SDC2026_TeamName_Runpod_POU.pdf`](submission/SDC2026_TeamName_Runpod_POU.pdf)
+
+---
+
+## Challenges & Learnings
+
+- What challenges did you face, and how did you overcome them?
+- What did your team learn?
+
+## Future Improvements
+
+- [ ] Improvement 1
+- [ ] Improvement 2
+
+## Team
+
+| Name        | Role                | GitHub                                   |
+| ----------- | ------------------- | ---------------------------------------- |
+| Member Name | Team Lead / Backend | [@username](https://github.com/username) |
+| Member Name | Frontend            | [@username](https://github.com/username) |
+| Member Name | AI / RunPod         | [@username](https://github.com/username) |
+
+---
+
+## Submission Checklist
+
+- [ ] Team name, domain (Domain 1 / Domain 2) and SDG track filled in
+- [ ] Slide deck link added
+- [ ] Demo video link added
+- [ ] Replit used, with proof of use in `submission/`
+- [ ] RunPod used, with proof of use in `submission/`
+- [ ] Preliminary submission completed (`SDC2026_TeamName_Preliminary.pdf`)
+- [ ] Technology declaration completed (`SDC2026_TeamName_TechDeclaration.pdf`)
+- [ ] Submission files renamed with your team name (replace `TeamName`)
+- [ ] "How to Run" steps verified
+- [ ] No API keys or secrets committed to the repository
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
