@@ -1,5 +1,5 @@
 -- Orbyte Smart Inventory — demo data (run 2nd, after schema.sql)
--- Demo business: "Kedai Runcit Pak Ali", a small family-run grocery shop in Melaka
+-- Demo business: "Kedai Runcit Pak Abu", a small family-run grocery shop in Melaka
 -- Supplier names, contact people, phone numbers and barcodes are made up.
 -- Running this file again needs schema.sql first (schema.sql resets all tables).
 
@@ -90,11 +90,11 @@ INSERT INTO Restock_Orders (product_id, supplier_id, quantity, urgency, ai_reaso
                             status, approved_by, approved_at, created_at)
 VALUES (5, 4, 10, 'high',
         'Telur cepat habis pada hujung minggu dan stok hanya cukup untuk 1 hari.',
-        'Assalamualaikum Encik Rahim, ini Kedai Runcit Pak Ali. Boleh hantar 10 papan Telur Ayam Gred A esok pagi? Terima kasih.',
-        'received', 'Pak Ali', NOW() - INTERVAL 5 DAY, NOW() - INTERVAL 5 DAY);
+        'Assalamualaikum Encik Rahim, ini Kedai Runcit Pak Abu. Boleh hantar 10 papan Telur Ayam Gred A esok pagi? Terima kasih.',
+        'received', 'Pak Abu', NOW() - INTERVAL 5 DAY, NOW() - INTERVAL 5 DAY);
 
 INSERT INTO Activity_Logs (action_type, product_id, order_id, quantity, details, performed_by, created_at) VALUES
 ('LOW_STOCK',        5, NULL, NULL, 'Stok Telur Ayam mencapai paras minimum',            'system',  NOW() - INTERVAL 5 DAY - INTERVAL 2 MINUTE),
 ('AI_DRAFT',         5, 1,    10,   'AI menyediakan draf mesej untuk Ladang Telur Sri Melaka', 'system', NOW() - INTERVAL 5 DAY - INTERVAL 1 MINUTE),
-('APPROVED',         5, 1,    10,   'Pemilik meluluskan dan menghantar pesanan WhatsApp', 'Pak Ali', NOW() - INTERVAL 5 DAY),
-('RESTOCK_RECEIVED', 5, 1,    10,   'Barang sampai, stok bertambah 10',                  'Pak Ali', NOW() - INTERVAL 4 DAY);
+('APPROVED',         5, 1,    10,   'Pemilik meluluskan dan menghantar pesanan WhatsApp', 'Pak Abu', NOW() - INTERVAL 5 DAY),
+('RESTOCK_RECEIVED', 5, 1,    10,   'Barang sampai, stok bertambah 10',                  'Pak Abu', NOW() - INTERVAL 4 DAY);

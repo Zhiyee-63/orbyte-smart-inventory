@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { Html5Qrcode } from 'html5-qrcode'
 import './App.css'
 
 const BACKEND_URL = 'https://e18001d8-ab3c-4883-9464-81086cc8e9f0-00-95b61jke4hrr.sisko.replit.dev';
@@ -19,6 +20,14 @@ function App() {
   const [inventory, setInventory] = useState([]);
   const [inventoryError, setInventoryError] = useState('');
 
+  const [cameraOn, setCameraOn] = useState(false);
+  const [lastRead, setLastRead] = useState('');
+  const lastScanRef = useRef({ code: '', time: 0 });
+  const scanHandlerRef = useRef(null);
+  const inputRef = useRef(null); // for usb scanner
+  const [importSummary, setImportSummary] = useState(null);
+  const [isImporting, setIsImporting] = useState(false);
+
   const loadInventory = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/inventory`);
@@ -38,19 +47,18 @@ function App() {
     loadInventory();
   }, []);
 
-  const handleScan = async (e) => {
-    e.preventDefault();
-    if (!barcode) return;
+    const processScan = async (code) => {
+    if (!code || isScanning || showModal) return;
 
     setIsScanning(true);
-    setScanResult(`Connecting to server for barcode: ${barcode}...`);
+    setScanResult(`Connecting to server for barcode: ${code}...`);
 
     try {
       // 1. Process the scan
       const scanResponse = await fetch(`${BACKEND_URL}/api/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ barcode })
+        body: JSON.stringify({ barcode: code })
       });
 
       const scanData = await scanResponse.json();
@@ -60,17 +68,15 @@ function App() {
         return;
       }
 
-      // Temporarily update the UI while we check stock limits
       setInventory(prev => prev.map(item =>
-        item.barcode === barcode ? { ...item, stock: scanData.stock, status: scanData.status } : item
+        item.barcode === code ? { ...item, stock: scanData.stock, status: scanData.status } : item
       ));
 
       // 2. If stock hits the limit, request the AI Draft
       if (scanData.alert === true) {
         setScanResult(`⚠️ Low stock detected. Generating AI draft...`);
 
-        // Find the full item details from our local state to send to Gemini
-        const itemDetails = inventory.find(i => i.barcode === barcode);
+        const itemDetails = inventory.find(i => i.barcode === code);
 
         if (!itemDetails) {
           setScanResult('❌ Inventory not loaded yet. Refresh and try again.');
@@ -99,6 +105,7 @@ function App() {
           setPendingItem({ ...itemDetails, stock: scanData.stock });
           setOrderQuantity(itemDetails.reorder_quantity);
           setEditableMessage(draftData.message);
+          setCameraOn(false);
           setShowModal(true);
         } else {
           setScanResult(`❌ AI Error: ${draftData.error || 'Failed to generate draft.'}`);
@@ -114,8 +121,118 @@ function App() {
       setScanResult('❌ Failed to connect to the backend server.');
     } finally {
       setIsScanning(false);
+      inputRef.current?.focus();
     }
   };
+
+  const handleScan = (e) => {
+  e.preventDefault();
+  processScan(barcode.trim());
+  };
+
+  const handleImportFile = async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  setIsImporting(true);
+  setImportSummary(null);
+
+  try {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter((l) => l.trim());
+    const headers = lines[0].split(',').map((h) => h.trim().toLowerCase());
+    const bi = headers.indexOf('barcode');     // change if the POS names it differently
+    const qi = headers.indexOf('quantity');    // e.g. 'qty'
+    if (bi === -1 || qi === -1) {
+      setImportSummary({ error: 'CSV needs "barcode" and "quantity" columns.' });
+      return;
+    }
+
+    // add up repeated rows for the same barcode
+    const totals = {};
+    for (const line of lines.slice(1)) {
+      const cols = line.split(',').map((c) => c.trim().replace(/^"|"$/g, ''));
+      const code = cols[bi];
+      const qty = Number(cols[qi]);
+      if (!code || !Number.isFinite(qty) || qty <= 0) continue;
+      totals[code] = (totals[code] || 0) + qty;
+    }
+    const sales = Object.entries(totals).map(([barcode, quantity]) => ({ barcode, quantity }));
+
+    const res = await fetch(`${BACKEND_URL}/api/import-sales`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sales })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    setImportSummary(data);
+    loadInventory();
+  } catch (err) {
+    setImportSummary({ error: err.message });
+  } finally {
+    setIsImporting(false);
+    e.target.value = ''; // allows choosing the same file again
+  }
+};
+
+  // always point to the newest processScan, so the camera never uses stale inventory
+  useEffect(() => {
+    scanHandlerRef.current = processScan;
+  });
+
+    useEffect(() => {
+    let buffer = '';
+    let lastKeyTime = 0;
+
+    const onKeyDown = (e) => {
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+      const now = Date.now();
+      if (now - lastKeyTime > 100) buffer = '';
+      lastKeyTime = now;
+
+      if (e.key === 'Enter') {
+        if (buffer.length >= 6) scanHandlerRef.current(buffer);
+        buffer = '';
+      } else if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    if (!cameraOn) return;
+    const scanner = new Html5Qrcode('camera-box');
+
+    scanner
+      .start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 250, height: 150 } },
+        (decodedText) => {
+          const now = Date.now();
+          const last = lastScanRef.current;
+          // ignore the same barcode read again within 3 seconds
+          if (decodedText === last.code && now - last.time < 3000) return;
+          lastScanRef.current = { code: decodedText, time: now };
+          setLastRead(decodedText);
+          setBarcode(decodedText);
+          scanHandlerRef.current(decodedText);
+        }
+      )
+      .catch((err) => {
+        setScanResult(`❌ Camera error: ${err}`);
+        setCameraOn(false);
+      });
+
+    return () => {
+      scanner.stop().then(() => scanner.clear()).catch(() => {});
+    };
+  }, [cameraOn]);
 
   const handleApprove = async () => {
     setIsSending(true);
@@ -133,6 +250,8 @@ function App() {
       });
 
       if (response.ok) {
+        const data = await response.json();
+        window.open(data.whatsapp_link, '_blank');
         const timestamp = new Date().toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' });
         const newLog = {
           id: Date.now(),
@@ -148,7 +267,8 @@ function App() {
         setScanResult(`✅ LOGGED: Replenishment order sent to ${pendingItem.supplier} via WhatsApp.`);
         loadInventory();
       } else {
-        alert("Failed to approve the order. Check the backend console.");
+        const err = await response.json().catch(() => ({}));
+        alert("Failed to approve: " + (err.error || response.status));
       }
     } catch (error) {
       console.error("Approve error:", error);
@@ -167,6 +287,8 @@ function App() {
         <h2>Point of Sale (Manual / Barcode Input)</h2>
         <form onSubmit={handleScan} className="scan-form">
           <input
+            ref={inputRef}
+            autoFocus
             type="text"
             value={barcode}
             onChange={(e) => setBarcode(e.target.value)}
@@ -178,6 +300,28 @@ function App() {
             {isScanning ? 'Processing...' : 'Record Sale'}
           </button>
         </form>
+        <button
+        type="button"
+        onClick={() => setCameraOn((on) => !on)}
+        style={{ marginTop: '10px', padding: '10px 20px', fontSize: '16px', backgroundColor: cameraOn ? '#dc3545' : '#28a745', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        >
+          {cameraOn ? 'Stop Camera' : 'Scan with Camera'}
+        </button>
+        {cameraOn && <div id="camera-box" style={{ width: '320px', margin: '15px auto 0' }} />}
+        {lastRead && <p style={{ color: '#000' }}>Last read: <strong>{lastRead}</strong></p>}
+        <div style={{ marginTop: '15px', color: '#000' }}>
+          <strong>Import POS sales (CSV)</strong><br />
+          <input type="file" accept=".csv" onChange={handleImportFile} disabled={isImporting} />
+          {isImporting && <p>Importing...</p>}
+          {importSummary?.error && <p style={{ color: 'red' }}>❌ {importSummary.error}</p>}
+          {importSummary && !importSummary.error && (
+            <div>
+              <p>✅ Updated {importSummary.updated} items.</p>
+              {importSummary.unknown?.length > 0 && <p>⚠️ Unknown barcodes: {importSummary.unknown.join(', ')}</p>}
+              {importSummary.lowStock?.length > 0 && <p>⚠️ Now low: {importSummary.lowStock.join(', ')}</p>}
+            </div>
+          )}
+        </div>
         {scanResult && <p style={{ fontWeight: 'bold', color: scanResult.includes('❌') ? 'red' : '#0056b3', marginTop: '10px' }}>{scanResult}</p>}
       </div>
 
