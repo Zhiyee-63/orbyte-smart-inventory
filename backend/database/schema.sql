@@ -1,5 +1,5 @@
 -- Orbyte Smart Inventory — schema (run 1st)
--- Demo business: "Kedai Runcit Pak Ali", a small family-run grocery shop in Melaka (all data is synthetic)
+-- Demo business: "Kedai Runcit Pak Abu", a small family-run grocery shop in Melaka (all data is synthetic)
 -- Database: MySQL 8 (hosted on Aiven)
 
 -- =====================================================================
