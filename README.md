@@ -21,8 +21,7 @@
 | ----------------- | ---------------------------------------------- |
 | GitHub Repository | https://github.com/Zhiyee-63/orbyte-smart-inventory |
 | Live Demo         | https://e18001d8-ab3c-4883-9464-81086cc8e9f0-00-95b61jke4hrr.sisko.replit.dev |
-| RunPod Endpoint   | *N/A (Utilized Google Gemini API via Replit Cloud)* |
-| Slide Deck        | *[Insert Google Drive / PDF Link]*             |
+| Slide Deck        | https://drive.google.com/file/d/1-7fuNUfnfG1_vIWEsT6uNC2K3SuZ4k3u/view?usp=sharing            |
 | Demo Video        | *[Insert YouTube Link]*                        |
 
 ---
