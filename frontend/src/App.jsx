@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import './App.css'
 
 const BACKEND_URL = 'https://e18001d8-ab3c-4883-9464-81086cc8e9f0-00-95b61jke4hrr.sisko.replit.dev';
@@ -205,34 +205,45 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  useEffect(() => {
-    if (!cameraOn) return;
-    const scanner = new Html5Qrcode('camera-box');
+useEffect(() => {
+  if (!cameraOn) return;
+  const scanner = new Html5Qrcode('camera-box', {
+    formatsToSupport: [
+      Html5QrcodeSupportedFormats.EAN_13,
+      Html5QrcodeSupportedFormats.EAN_8,
+      Html5QrcodeSupportedFormats.UPC_A,
+      Html5QrcodeSupportedFormats.UPC_E,
+      Html5QrcodeSupportedFormats.CODE_128,
+      Html5QrcodeSupportedFormats.QR_CODE,
+    ],
+    useBarCodeDetectorIfSupported: true,
+    verbose: false,
+  });
 
-    scanner
-      .start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 150 } },
-        (decodedText) => {
-          const now = Date.now();
-          const last = lastScanRef.current;
-          // ignore the same barcode read again within 3 seconds
-          if (decodedText === last.code && now - last.time < 3000) return;
-          lastScanRef.current = { code: decodedText, time: now };
-          setLastRead(decodedText);
-          setBarcode(decodedText);
-          scanHandlerRef.current(decodedText);
-        }
-      )
-      .catch((err) => {
-        setScanResult(`❌ Camera error: ${err}`);
-        setCameraOn(false);
-      });
+  scanner
+    .start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 300, height: 120 } },
+      (decodedText) => {
+        const now = Date.now();
+        const last = lastScanRef.current;
+        if (decodedText === last.code && now - last.time < 3000) return;
+        lastScanRef.current = { code: decodedText, time: now };
+        setLastRead(decodedText);
+        setBarcode(decodedText);
+        scanHandlerRef.current(decodedText);
+      },
+      () => {} // ignore frame noise
+    )
+    .catch((err) => {
+      setScanResult(`❌ Camera error: ${err}`);
+      setCameraOn(false);
+    });
 
-    return () => {
-      scanner.stop().then(() => scanner.clear()).catch(() => {});
-    };
-  }, [cameraOn]);
+  return () => {
+    scanner.stop().then(() => scanner.clear()).catch(() => {});
+  };
+}, [cameraOn]);
 
   const handleApprove = async () => {
     setIsSending(true);
@@ -250,8 +261,10 @@ function App() {
       });
 
       if (response.ok) {
-        const data = await response.json();
-        window.open(data.whatsapp_link, '_blank');
+  const data = await response.json();
+  if (data.whatsapp_link) {
+    window.open(data.whatsapp_link, '_blank', 'noopener,noreferrer');
+  }
         const timestamp = new Date().toLocaleString('en-MY', { timeZone: 'Asia/Kuala_Lumpur' });
         const newLog = {
           id: Date.now(),
@@ -402,10 +415,17 @@ function App() {
 
             <div style={{ margin: '15px 0' }}>
               <label style={{ display: 'block', fontWeight: 'bold', marginBottom: '5px' }}>Adjust Restock Quantity:</label>
-              <input
+             <input
                 type="number"
                 value={orderQuantity}
-                onChange={(e) => setOrderQuantity(e.target.value)}
+                onChange={(e) => {
+                  const newQty = e.target.value;
+                  setOrderQuantity(newQty);
+                  if (newQty && pendingItem?.unit) {
+                  const unitRegex = new RegExp(`\\b\\d+\\s+(?=${pendingItem.unit}\\b)`, 'i');
+                  setEditableMessage((prev) => prev.replace(unitRegex, `${newQty} `));
+                  }
+                }}
                 style={{ padding: '8px', width: '100px', fontSize: '16px', border: '1px solid #ccc', borderRadius: '4px' }}
               />
             </div>
