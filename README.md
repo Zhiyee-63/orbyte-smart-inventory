@@ -21,6 +21,7 @@
 | ----------------- | ---------------------------------------------- |
 | GitHub Repository | https://github.com/Zhiyee-63/orbyte-smart-inventory |
 | Live Demo         | https://e18001d8-ab3c-4883-9464-81086cc8e9f0-00-95b61jke4hrr.sisko.replit.dev |
+| Live Dev (.dev)   | https://admired-closed-mainframe.replit.app |
 | Slide Deck        | submission/SDC2026_Pentagrammers_SlideDeck.pdf   |
 | Demo Video        | https://youtu.be/xlp8Vu2SR0k                        |
 
