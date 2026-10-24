@@ -322,6 +322,12 @@ app.post("/api/draft-supplier-message", async (req, res) => {
   }
 });
 
+const path = require("path");
+app.use(express.static(path.join(__dirname, "../frontend/dist")));
+app.get("/{*splat}", (req, res) => {
+  res.sendFile(path.join(__dirname, "../frontend/dist/index.html"));
+});
+
 app.listen(port, "0.0.0.0", (error) => {
   if (error) {
     console.error(

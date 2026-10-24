@@ -45,3 +45,7 @@ build = [
   "cd frontend && npm install && npm run build && cd ../backend && npm install",
 ]
 run = ["sh", "-c", "cd backend && node server.js"]
+
+[postMerge]
+path = "scripts/post-merge.sh"
+timeoutMs = 180000
