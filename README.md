@@ -22,7 +22,7 @@
 | GitHub Repository | https://github.com/Zhiyee-63/orbyte-smart-inventory |
 | Live Demo         | https://e18001d8-ab3c-4883-9464-81086cc8e9f0-00-95b61jke4hrr.sisko.replit.dev |
 | Slide Deck        | https://drive.google.com/file/d/1-7fuNUfnfG1_vIWEsT6uNC2K3SuZ4k3u/view?usp=sharing            |
-| Demo Video        | *[Insert YouTube Link]*                        |
+| Demo Video        | https://youtu.be/xlp8Vu2SR0k                        |
 
 ---
 
@@ -176,57 +176,52 @@ Secrets: API credentials (Gemini API key, MySQL passwords) are securely stored u
 
 ## How We Use RunPod *(Required)*
 
-Describe how your team used RunPod. For example:
+Workload Status: N/A — Our project utilizes the cloud-hosted Google Gemini API (@google/genai SDK, gemini-2.5-flash) directly via Replit rather than self-hosted GPU containers on RunPod.
 
-- **Workload:** Model inference (e.g. text generation, image processing) runs on a RunPod GPU.
-- **Setup:** `runpod/handler.py` is deployed as a **RunPod Serverless Endpoint**.
-- **Integration:** The Replit app sends requests to the endpoint using `RUNPOD_API_KEY` and `RUNPOD_ENDPOINT_ID`.
-
-Example request:
-
-```bash
-curl -X POST https://api.runpod.ai/v2/$RUNPOD_ENDPOINT_ID/runsync \
-  -H "Authorization: Bearer $RUNPOD_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{"input": {"prompt": "Hello"}}'
-```
-
-📄 Proof of use: [`submission/SDC2026_TeamName_Runpod_POU.pdf`](submission/SDC2026_TeamName_Runpod_POU.pdf)
+📄 Proof of use: [`submission/SDC2026_TeamName_Replit_POU.pdf`]
 
 ---
 
 ## Challenges & Learnings
 
-- What challenges did you face, and how did you overcome them?
-- What did your team learn?
+Challenge: Managing browser security policies and network firewalls between local React development (localhost:5173) and cloud-hosted Replit backend endpoints.
+
+Solution: Configured CORS and Vite proxy rules to ensure seamless communication, alongside enabling public networking preview mode in Replit.
+
+Learning: Balancing deterministic rules (SQL stock math) with generative AI (Bahasa Melayu supplier messaging) ensures both operational accuracy and natural communication without relying on AI for critical database updates.
 
 ## Future Improvements
 
-- [ ] Improvement 1
-- [ ] Improvement 2
+[ ] Automatic delivery receipt scanning via camera OCR to add received stock back into MySQL.
+
+[ ] Multi-supplier price comparison analytics to suggest the most cost-effective restock option.
+
+[ ] Integration into the broader Orbyte multi-tenant SME platform ecosystem.
 
 ## Team
 
 | Name        | Role                | GitHub                                   |
 | ----------- | ------------------- | ---------------------------------------- |
-| Member Name | Team Lead / Backend | [@username](https://github.com/username) |
-| Member Name | Frontend            | [@username](https://github.com/username) |
-| Member Name | AI / RunPod         | [@username](https://github.com/username) |
+| Cha Zhi Yi | Team Lead / Frontend | [@Zhiyee-63](https://github.com/Zhiyee-63) |
+| DAKHINESWARAN A/L R MANIMARAN  | Backend | [DAKHINESWARAN](https://github.com/DAKHINESWARAN) |
+| LOOK ZHI HIN | AI    | [zhihin-ui](https://github.com/zhihin-ui) |
+| KIRANI NAURA WIJAYA  | Database   | [kirani16](https://github.com/kirani16) |
+| Yew Zhi Xuan | Pitch Deck | [zyew609](https://github.com/zyew609) |
 
 ---
 
 ## Submission Checklist
 
-- [ ] Team name, domain (Domain 1 / Domain 2) and SDG track filled in
-- [ ] Slide deck link added
-- [ ] Demo video link added
+- [ ✓ ] Team name, domain (Domain 1 / Domain 2) and SDG track filled in
+- [ ✓ ] Slide deck link added
+- [ ✓ ] Demo video link added
 - [ ] Replit used, with proof of use in `submission/`
 - [ ] RunPod used, with proof of use in `submission/`
 - [ ] Preliminary submission completed (`SDC2026_TeamName_Preliminary.pdf`)
 - [ ] Technology declaration completed (`SDC2026_TeamName_TechDeclaration.pdf`)
-- [ ] Submission files renamed with your team name (replace `TeamName`)
-- [ ] "How to Run" steps verified
-- [ ] No API keys or secrets committed to the repository
+- [ ✓ ] Submission files renamed with your team name (replace `TeamName`)
+- [ ✓ ] "How to Run" steps verified
+- [ ✓ ] No API keys or secrets committed to the repository
 
 ## License
 
