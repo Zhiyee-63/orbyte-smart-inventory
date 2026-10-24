@@ -7,7 +7,7 @@ const app = express();
 app.use(cors());
 const port = Number(process.env.PORT) || 3000;
 
-app.use(express.json({ limit: "16kb" }));
+app.use(express.json({ limit: "1mb" }));
 
 app.get("/health", (_req, res) => {
   res.type("text").send("OK");
@@ -83,6 +83,73 @@ app.post("/api/scan", async (req, res) => {
   }
 });
 
+app.post("/api/import-sales", async (req, res) => {
+  const sales = req.body?.sales;
+  if (!Array.isArray(sales) || sales.length === 0) {
+    return res.status(400).json({ error: "sales_required" });
+  }
+  if (sales.length > 5000) {
+    return res.status(400).json({ error: "too_many_rows" });
+  }
+
+  const pool = getMysqlPool();
+  const conn = await pool.getConnection();
+
+  let updated = 0;
+  const unknown = [];
+  const lowStock = [];
+  const shortfall = [];
+
+  try {
+    // all-or-nothing: if anything fails, no stock is changed
+    await conn.beginTransaction();
+
+    for (const entry of sales) {
+      const barcode =
+        typeof entry?.barcode === "string" ? entry.barcode.trim() : "";
+      const quantity = Number(entry?.quantity);
+      if (!barcode || !Number.isInteger(quantity) || quantity <= 0) continue;
+
+      const [rows] = await conn.query(
+        "SELECT product_id, name, stock, reorder_level FROM Products WHERE barcode = ? FOR UPDATE",
+        [barcode],
+      );
+      if (rows.length === 0) {
+        unknown.push(barcode);
+        continue;
+      }
+
+      const product = rows[0];
+      const newStock = Math.max(0, product.stock - quantity);
+      if (quantity > product.stock) shortfall.push(product.name);
+
+      await conn.query("UPDATE Products SET stock = ? WHERE product_id = ?", [
+        newStock,
+        product.product_id,
+      ]);
+
+      await conn.query(
+        "INSERT INTO Activity_Logs (action_type, product_id, quantity, details, performed_by) VALUES ('SALE', ?, ?, 'Imported from POS sales CSV', 'pos_import')",
+        [product.product_id, quantity],
+      );
+
+      updated++;
+      if (stockStatus(newStock, product.reorder_level) === "Low") {
+        lowStock.push(product.name);
+      }
+    }
+
+    await conn.commit();
+    return res.json({ updated, unknown, lowStock, shortfall });
+  } catch (error) {
+    await conn.rollback().catch(() => {});
+    console.error("IMPORT SALES ERROR:", error);
+    return res.status(500).json({ error: "import_failed" });
+  } finally {
+    conn.release();
+  }
+});
+
 app.get("/api/inventory", async (_req, res) => {
   try {
     const [rows] = await getMysqlPool().query(
@@ -120,9 +187,9 @@ app.post("/api/approve", async (req, res) => {
   try {
     const pool = getMysqlPool();
 
-    // 1. Product + its own supplier (change s.phone if your column is named differently)
     const [rows] = await pool.query(
       `SELECT p.product_id, p.name, p.stock, p.reorder_level, p.status,
+              p.reorder_quantity, p.unit,
               s.whatsapp AS supplier_phone
        FROM Products p
        JOIN Suppliers s ON s.supplier_id = p.supplier_id
@@ -141,7 +208,7 @@ app.post("/api/approve", async (req, res) => {
       return res.status(409).json({ error: "already_ordered" });
     }
 
-    // that supplier's number, with the secret as a testing fallback
+    // digits only, with country code, e.g. 60123456789
     const supplierPhone = String(
       product.supplier_phone || process.env.SUPPLIER_PHONE_NUMBER || "",
     ).replace(/\D/g, "");
@@ -149,41 +216,14 @@ app.post("/api/approve", async (req, res) => {
       return res.status(422).json({ error: "supplier_phone_missing" });
     }
 
-    // 2. Send WhatsApp via Kapso
+    // the owner-approved draft from the frontend, or a simple fallback
     const messageText =
       typeof req.body?.message === "string" && req.body.message.trim()
         ? req.body.message.trim()
-        : `Approval logged! Product ${product.name} (barcode: ${barcode}) was approved by ${approvedBy}. Please process the restock.`;
+        : `Salam boss, stok ${product.name} kat kedai dah nak habis. Boleh hantar ${product.reorder_quantity} ${product.unit} lagi tak? Terima kasih ya.`;
 
-    const response = await fetch(
-      `https://api.kapso.ai/meta/whatsapp/v24.0/${process.env.KAPSO_PHONE_NUMBER_ID}/messages`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-API-Key": process.env.KAPSO_API_KEY,
-        },
-        body: JSON.stringify({
-          messaging_product: "whatsapp",
-          recipient_type: "individual",
-          to: supplierPhone,
-          type: "text",
-          text: { body: messageText },
-        }),
-      },
-    );
-    if (!response.ok) {
-      console.error(
-        "WhatsApp send failed:",
-        response.status,
-        await response.text(),
-        "to number ending",
-        supplierPhone.slice(-4),
-      );
-      return res.status(502).json({ error: "whatsapp_failed" });
-    }
+    const whatsappLink = `https://wa.me/${supplierPhone}?text=${encodeURIComponent(messageText)}`;
 
-    // 3. Log it, 4. mark as ordered (only reached if the message was sent)
     await pool.query(
       "INSERT INTO Activity_Logs (action_type, product_id, details, performed_by) VALUES ('APPROVED', ?, 'Owner approved the restock order', ?)",
       [product.product_id, approvedBy],
@@ -195,7 +235,8 @@ app.post("/api/approve", async (req, res) => {
 
     return res.json({
       status: "ok",
-      message: "Approved, logged, and supplier notified via WhatsApp",
+      message: "Approved and logged. Open WhatsApp to send it to the supplier.",
+      whatsapp_link: whatsappLink,
     });
   } catch (error) {
     console.error("APPROVE ERROR:", error);
